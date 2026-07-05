@@ -273,7 +273,10 @@ const ProfileForm = ({
 
 const LanguageSelector = () => {
   const translate = useTranslate();
-  const locales = useLocales();
+  const providerLocales = useLocales();
+  const locales = providerLocales.some((language) => language.locale === "el")
+    ? providerLocales
+    : [...providerLocales, { locale: "el", name: "Ελληνικά" }];
   const [locale, setLocale] = useLocaleState();
 
   if (locales.length <= 1) {

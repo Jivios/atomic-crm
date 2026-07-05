@@ -20,7 +20,12 @@ import { useLocales, useLocaleState } from "ra-core";
  * @see {@link https://marmelab.com/ra-core/translationsetup/ i18nProvider setup}
  */
 export function LocalesMenuButton() {
-  const languages = useLocales();
+  const providerLanguages = useLocales();
+  const languages = providerLanguages.some(
+    (language) => language.locale === "el",
+  )
+    ? providerLanguages
+    : [...providerLanguages, { locale: "el", name: "Ελληνικά" }];
   const [locale, setLocale] = useLocaleState();
 
   const getNameForLocale = (locale: string): string => {

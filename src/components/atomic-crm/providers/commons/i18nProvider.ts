@@ -6,6 +6,9 @@ import { raSupabaseEnglishMessages } from "ra-supabase-language-english";
 import { raSupabaseFrenchMessages } from "ra-supabase-language-french";
 import { englishCrmMessages } from "./englishCrmMessages";
 import { frenchCrmMessages } from "./frenchCrmMessages";
+import { greekMessages } from "./greekMessages";
+import { raSupabaseGreekMessages } from "./raSupabaseGreekMessages";
+import { greekCrmMessages } from "./greekCrmMessages";
 
 const raSupabaseEnglishMessagesOverride = {
   "ra-supabase": {
@@ -20,6 +23,15 @@ const raSupabaseFrenchMessagesOverride = {
     auth: {
       password_reset:
         "Consultez vos emails pour trouver le message de reinitialisation du mot de passe.",
+    },
+  },
+};
+
+const raSupabaseGreekMessagesOverride = {
+  "ra-supabase": {
+    auth: {
+      password_reset:
+        "Ελέγξτε τα email σας για μήνυμα επαναφοράς κωδικού πρόσβασης.",
     },
   },
 };
@@ -39,14 +51,26 @@ const frenchCatalog = mergeTranslations(
   frenchCrmMessages,
 );
 
-export const getInitialLocale = (): "en" | "fr" => {
+const greekCatalog = mergeTranslations(
+  englishCatalog,
+  greekMessages,
+  raSupabaseGreekMessages,
+  raSupabaseGreekMessagesOverride,
+  greekCrmMessages,
+);
+
+export const getInitialLocale = (): "en" | "fr" | "el" => {
   if (typeof navigator === "undefined") {
     return "en";
   }
 
   const browserLocale = navigator.languages?.[0] ?? navigator.language;
-  if (browserLocale?.toLowerCase().startsWith("fr")) {
+  const lowerBrowserLocale = browserLocale?.toLowerCase();
+  if (lowerBrowserLocale?.startsWith("fr")) {
     return "fr";
+  }
+  if (lowerBrowserLocale?.startsWith("el")) {
+    return "el";
   }
 
   return "en";
@@ -57,12 +81,16 @@ export const i18nProvider = polyglotI18nProvider(
     if (locale === "fr") {
       return frenchCatalog;
     }
+    if (locale === "el") {
+      return greekCatalog;
+    }
     return englishCatalog;
   },
   getInitialLocale(),
   [
     { locale: "en", name: "English" },
     { locale: "fr", name: "Français" },
+    { locale: "el", name: "Ελληνικά" },
   ],
   { allowMissing: true },
 );
