@@ -335,12 +335,9 @@ async function reconcileGoogleEvents({
     if (error) throw error;
 
     if (existing) {
-      if (existing.status === "deleted" && existing.deleted_source === "crm") {
+      if (existing.status === "deleted" || existing.status === "cancelled") {
         continue;
       }
-
-      const shouldRestoreFromGoogle =
-        existing.status === "deleted" && existing.deleted_source === "google";
 
       const { error: updateError } = await supabaseClient
         .from("calendar_events")
@@ -353,9 +350,7 @@ async function reconcileGoogleEvents({
           description: googleEvent.description || null,
           google_html_link: googleEvent.htmlLink || null,
           sync_status: "synced",
-          status: shouldRestoreFromGoogle ? "active" : existing.status,
-          deleted_at: shouldRestoreFromGoogle ? null : undefined,
-          deleted_source: shouldRestoreFromGoogle ? null : undefined,
+          status: existing.status,
         })
         .eq("id", existing.id);
 

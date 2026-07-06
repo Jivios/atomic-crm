@@ -20,6 +20,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  RotateCcw,
   Trash2,
   X,
 } from "lucide-react";
@@ -283,6 +284,9 @@ const initialAppointmentForm: AppointmentFormState = {
 export const CalendarPage = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [calendarEvents, setCalendarEvents] = useState<EventInput[]>([]);
+  const [deletedCalendarEvents, setDeletedCalendarEvents] = useState<
+    EventInput[]
+  >([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [refreshCounter, setRefreshCounter] = useState(0);
@@ -294,6 +298,8 @@ export const CalendarPage = () => {
   const [deleteConfirmation, setDeleteConfirmation] =
     useState<EventDetails | null>(null);
   const [isDeletingEvent, setIsDeletingEvent] = useState(false);
+  const [isRestoringEvent, setIsRestoringEvent] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const [overlapWarning, setOverlapWarning] = useState<OverlapWarning | null>(
     null,
   );
@@ -334,6 +340,52 @@ export const CalendarPage = () => {
         return (aRange?.start.getTime() ?? 0) - (bRange?.start.getTime() ?? 0);
       });
   }, [calendarEvents, selectedDate]);
+
+  const selectedDeletedDayEvents = useMemo(() => {
+    return deletedCalendarEvents
+      .filter((event) => {
+        const range = getEventRange(event);
+        if (!range) return false;
+
+        const selected = new Date(`${selectedDate}T12:00:00`);
+
+        return (
+          isSameCalendarDay(range.start, selected) ||
+          (range.start <= selected && range.end >= selected)
+        );
+      })
+      .sort((a, b) => {
+        const aRange = getEventRange(a);
+        const bRange = getEventRange(b);
+
+        return (aRange?.start.getTime() ?? 0) - (bRange?.start.getTime() ?? 0);
+      });
+  }, [deletedCalendarEvents, selectedDate]);
+
+  useEffect(() => {
+    const hasSelectedDayItems = [
+      ...calendarEvents,
+      ...deletedCalendarEvents,
+    ].some((event) => {
+      const range = getEventRange(event);
+      if (!range) return false;
+
+      const selected = new Date(`${selectedDate}T12:00:00`);
+
+      return (
+        isSameCalendarDay(range.start, selected) ||
+        (range.start <= selected && range.end >= selected)
+      );
+    });
+
+    if (!hasSelectedDayItems && calendarEvents.length > 0) {
+      const firstEventRange = getEventRange(calendarEvents[0]);
+
+      if (firstEventRange) {
+        setSelectedDate(toDateInputValue(firstEventRange.start));
+      }
+    }
+  }, [calendarEvents, deletedCalendarEvents, selectedDate]);
 
   const toggleCompletedEvent = (eventId: string) => {
     setCompletedEventIds((current) => {
@@ -426,8 +478,19 @@ export const CalendarPage = () => {
         }),
       );
 
+      const deletedEvents: EventInput[] = (data.deletedEvents ?? []).map(
+        (event: EventInput) => ({
+          ...event,
+          backgroundColor: "#94a3b8",
+          borderColor: "#94a3b8",
+          textColor: "#ffffff",
+        }),
+      );
+
       setCalendarEvents(coloredEvents);
+      setDeletedCalendarEvents(deletedEvents);
     } catch (error) {
+      setDeletedCalendarEvents([]);
       setEventsError(
         error instanceof Error
           ? error.message
@@ -588,6 +651,52 @@ export const CalendarPage = () => {
       });
     } finally {
       setIsDeletingEvent(false);
+    }
+  };
+
+  const handleRestoreEvent = async (event: EventDetails) => {
+    if (!event.eventId) return;
+
+    setIsRestoringEvent(true);
+
+    try {
+      const supabaseClient = getSupabaseClient();
+
+      const { data, error } = await supabaseClient.functions.invoke(
+        "create-calendar-event",
+        {
+          body: {
+            action: "restore",
+            eventId: event.eventId,
+          },
+        },
+      );
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (!data?.ok) {
+        throw new Error(data?.error ?? "Δεν έγινε επαναφορά του event.");
+      }
+
+      setCreateEventState({
+        status: "success",
+        message: "Το event επανήλθε στο ημερολόγιο.",
+        htmlLink: data.htmlLink,
+      });
+      setRefreshCounter((current) => current + 1);
+      setHistoryExpanded(false);
+    } catch (error) {
+      setCreateEventState({
+        status: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Δεν ήταν δυνατή η επαναφορά του event.",
+      });
+    } finally {
+      setIsRestoringEvent(false);
     }
   };
 
@@ -1130,6 +1239,86 @@ export const CalendarPage = () => {
                 )}
               </div>
             </div>
+
+            {selectedDeletedDayEvents.length > 0 && (
+              <div className="mt-6 border-t border-slate-200 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setHistoryExpanded((current) => !current)}
+                  className="flex w-full items-center justify-between rounded-xl px-2 py-2 text-left text-sm text-slate-500 transition hover:bg-slate-100"
+                >
+                  <span>
+                    Ιστορικό διαγραμμένων / ακυρωμένων events ·{" "}
+                    <span className="font-semibold">
+                      {selectedDeletedDayEvents.length}
+                    </span>
+                  </span>
+
+                  <span className="text-xs font-semibold uppercase tracking-wide">
+                    {historyExpanded ? "Απόκρυψη" : "Εμφάνιση"}
+                  </span>
+                </button>
+
+                {historyExpanded && (
+                  <div className="mt-2 rounded-xl border border-slate-200 bg-white">
+                    <div className="divide-y divide-slate-100">
+                      {selectedDeletedDayEvents.map((event) => {
+                        const eventId = getEventIdentity(event);
+                        const range = getEventRange(event);
+                        const details = getEventDetailsFromInput(event);
+                        const deletedSource = String(
+                          event.extendedProps?.deletedSource || "",
+                        );
+
+                        return (
+                          <div
+                            key={eventId}
+                            className="grid grid-cols-[110px_1fr_auto_auto] items-center gap-3 px-3 py-2 text-xs text-slate-500"
+                          >
+                            <span className="font-medium line-through">
+                              {formatEventTime(
+                                range?.start ?? null,
+                                range?.end ?? null,
+                                Boolean(event.allDay),
+                              )}
+                            </span>
+
+                            <span className="truncate line-through">
+                              {details.title}
+                            </span>
+
+                            <span className="hidden text-[10px] font-semibold uppercase tracking-wide text-slate-400 md:block">
+                              {deletedSource === "google"
+                                ? "Google"
+                                : deletedSource === "crm"
+                                  ? "CRM"
+                                  : "Deleted"}
+                            </span>
+
+                            {details.eventId && (
+                              <button
+                                type="button"
+                                onClick={() => handleRestoreEvent(details)}
+                                disabled={isRestoringEvent}
+                                className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-[#032360] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                title="Επαναφορά event"
+                              >
+                                {isRestoringEvent ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                )}
+                                Επαναφορά
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
       </div>

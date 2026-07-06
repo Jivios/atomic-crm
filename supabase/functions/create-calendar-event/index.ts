@@ -13,7 +13,7 @@ type ServiceAccount = {
 };
 
 type CalendarEventPayload = {
-  action?: "create" | "delete" | "complete" | "reopen";
+  action?: "create" | "delete" | "complete" | "reopen" | "restore";
   eventId?: string;
   summary?: string;
   description?: string;
@@ -329,6 +329,105 @@ Deno.serve(async (req) => {
         ok: true,
         eventId: crmEvent.id,
         status: nextStatus,
+      });
+    }
+
+    if (action === "restore") {
+      if (!payload.eventId) throw new Error("Missing required field: eventId");
+
+      const crmEvent = await findCalendarEvent(supabaseClient, payload.eventId);
+
+      if (!crmEvent) {
+        throw new Error("Calendar event not found.");
+      }
+
+      const googleEvent = {
+        summary: crmEvent.title,
+        description: crmEvent.description ?? "",
+        location: crmEvent.location ?? "",
+        start: {
+          dateTime: crmEvent.start_at,
+          timeZone: "Europe/Athens",
+        },
+        end: {
+          dateTime: crmEvent.end_at,
+          timeZone: "Europe/Athens",
+        },
+      };
+
+      const restoreResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+          calendarId,
+        )}/events`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(googleEvent),
+        },
+      );
+
+      const restoredGoogleEvent = await restoreResponse.json();
+
+      if (!restoreResponse.ok) {
+        await supabaseClient
+          .from("calendar_events")
+          .update({
+            sync_status: "error",
+          })
+          .eq("id", crmEvent.id);
+
+        await insertActivity(
+          supabaseClient,
+          crmEvent.id,
+          "google_sync_error",
+          "Google Calendar restore sync failed.",
+          {
+            details: restoredGoogleEvent,
+          },
+        );
+
+        return jsonResponse(
+          {
+            error: "Failed to restore Google Calendar event",
+            details: restoredGoogleEvent,
+          },
+          restoreResponse.status,
+        );
+      }
+
+      const { error } = await supabaseClient
+        .from("calendar_events")
+        .update({
+          status: "active",
+          deleted_at: null,
+          deleted_source: null,
+          google_event_id: restoredGoogleEvent.id,
+          google_html_link: restoredGoogleEvent.htmlLink,
+          sync_status: "synced",
+        })
+        .eq("id", crmEvent.id);
+
+      if (error) throw error;
+
+      await insertActivity(
+        supabaseClient,
+        crmEvent.id,
+        "restored",
+        "Deleted event restored from CRM history.",
+        {
+          googleEventId: restoredGoogleEvent.id,
+        },
+      );
+
+      return jsonResponse({
+        ok: true,
+        restored: true,
+        crmEventId: crmEvent.id,
+        eventId: restoredGoogleEvent.id,
+        htmlLink: restoredGoogleEvent.htmlLink,
       });
     }
 
