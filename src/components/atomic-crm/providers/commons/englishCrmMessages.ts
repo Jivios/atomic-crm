@@ -1,5 +1,11 @@
 export const englishCrmMessages = {
   resources: {
+    calendar: {
+      name: "Calendar",
+    },
+    properties: {
+      name: "Property |||| Properties",
+    },
     companies: {
       name: "Company |||| Companies",
       forcedCaseName: "Company",

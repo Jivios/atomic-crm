@@ -2,19 +2,19 @@
 
 # Agent Workflow
 
-Code-change requests are handled by the **agent harness** by default: a team of subagents (planner, developer, quality-reviewer, merger, documentator) that implements the change through a deterministic, foreground pipeline in git worktrees.
+By default, the main (top-level) session implements code-change requests **directly**: read, edit, test, and commit yourself — no subagent dispatch, no worktrees, no TASK files.
 
-**When the main (top-level) session receives a code-change request, dispatch the `orchestrator` agent and relay its result — never route or implement it yourself.** Pass the `<session_dir>` value from your own context in the dispatch prompt (the orchestrator needs it to namespace worktrees and branches). **This directive is for the top-level session only: if you are a subagent (already inside the harness), ignore it — do your own job and never dispatch an orchestrator. A runtime hook (`block-nested-orchestrator`) enforces this.** The `orchestrator` owns all routing (classification SIMPLE vs COMPLEX, plus the SETUP / MEMORY / ROLLBACK-CONFLICT / RECOVERY operational intents, the dispatch templates, the wave + promotion mechanics, and the deploy-time migration round); it drives developer/reviewer/merger to a terminal point before returning. Each agent's last line is an output contract the others parse (`.claude/rules/agent-output-format.md`).
+An **agent harness** (planner, developer, quality-reviewer, merger, documentator) exists as an *opt-in* for complex multi-file work: a team of subagents that implements a change through a deterministic, foreground pipeline in git worktrees. **This directive is for the top-level session only: if you are a subagent (already inside the harness), do your own job and never dispatch an orchestrator — a runtime hook (`block-nested-orchestrator`) enforces this.**
 
-**PD-ASK round-trip (migration confirmation).** The orchestrator ends its turn with a pending question — typically *"apply the database migration now?"* — and the task completes. Relay that question to the user (plain text or `AskUserQuestion`). **Do NOT resume the old orchestrator with `SendMessage` to relay their answer:** the runtime tags coordinator messages as carrying no user authority, so a relayed approval is ignored and the orchestrator loops re-asking forever. Instead, on the user's reply:
+## Opting in
+
+`#harness` (or "use the agent team" / "with the harness") dispatches the `orchestrator` agent and relays its result, instead of implementing directly. Pass the `<session_dir>` value from your own context in the dispatch prompt (the orchestrator needs it to namespace worktrees and branches). "harness for this session" keeps it on for the whole session. The `orchestrator` owns all routing (classification SIMPLE vs COMPLEX, plus the SETUP / MEMORY / ROLLBACK-CONFLICT / RECOVERY operational intents, the dispatch templates, the wave + promotion mechanics, and the deploy-time migration round); it drives developer/reviewer/merger to a terminal point before returning. Each agent's last line is an output contract the others parse (`.claude/rules/agent-output-format.md`).
+
+**PD-ASK round-trip (migration confirmation), when the harness is in use.** The orchestrator ends its turn with a pending question — typically *"apply the database migration now?"* — and the task completes. Relay that question to the user (plain text or `AskUserQuestion`). **Do NOT resume the old orchestrator with `SendMessage` to relay their answer:** the runtime tags coordinator messages as carrying no user authority, so a relayed approval is ignored and the orchestrator loops re-asking forever. Instead, on the user's reply:
 - **Approved** → dispatch a **fresh** `orchestrator` (a new `Agent` call) whose prompt begins with `<intent>apply-migration</intent>`, states the approval, and passes the same `<session_dir>`. It resumes the migration round from disk and applies it.
 - **Wants changes** → dispatch a fresh `orchestrator` with their new request as usual.
 
 While that fresh dispatch runs, **do not start a parallel plan B** (don't generate the migration yourself, don't `TaskStop` it) — wait for it to finish, then relay its result.
-
-## Opting out
-
-`#no-harness` (or "implement directly" / "without the agent team" / "skip harness") makes the main thread implement the change itself, no agents. "no-harness for this session" keeps it off for the whole session.
 
 ## Agents
 

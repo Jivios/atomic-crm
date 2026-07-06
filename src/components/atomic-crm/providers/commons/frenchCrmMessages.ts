@@ -2,6 +2,12 @@ import type { CrmMessages } from "./englishCrmMessages";
 
 export const frenchCrmMessages = {
   resources: {
+    calendar: {
+      name: "Calendrier",
+    },
+    properties: {
+      name: "Bien immobilier |||| Biens immobiliers",
+    },
     companies: {
       name: "Entreprise |||| Entreprises",
       forcedCaseName: "Entreprise",

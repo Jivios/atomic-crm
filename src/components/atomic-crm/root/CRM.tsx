@@ -59,6 +59,8 @@ import { ContactListMobile } from "../contacts/ContactList.tsx";
 import { ContactShow } from "../contacts/ContactShow.tsx";
 import { CompanyShow } from "../companies/CompanyShow.tsx";
 import { NoteShowPage } from "../notes/NoteShowPage.tsx";
+import { PropertiesPage } from "../properties/PropertiesPage";
+import { CalendarPage } from "../calendar/CalendarPage";
 
 const defaultStore = localStorageStore(undefined, "CRM");
 
@@ -264,8 +266,10 @@ const DesktopAdmin = (
         <Route path={SettingsPage.path} element={<SettingsPage />} />
         <Route path={ImportPage.path} element={<ImportPage />} />
         <Route path={ChangelogPage.path} element={<ChangelogPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
       </CustomRoutes>
       <Resource name="deals" {...deals} />
+      <Resource name="properties" list={PropertiesPage} />
       <Resource name="contacts" {...contacts} />
       <Resource name="companies" {...companies} />
       <Resource name="contact_notes" />
@@ -328,6 +332,7 @@ const MobileAdmin = (
             element={<SettingsPageMobile />}
           />
           <Route path={ChangelogPage.path} element={<ChangelogPage />} />
+          <Route path="/calendar" element={<CalendarPage />} />
         </CustomRoutes>
         <Resource
           name="contacts"
@@ -338,6 +343,7 @@ const MobileAdmin = (
           <Route path=":id/notes/:noteId" element={<NoteShowPage />} />
         </Resource>
         <Resource name="companies" show={CompanyShow} />
+        <Resource name="properties" list={PropertiesPage} />
         <Resource name="tasks" list={MobileTasksList} />
       </Admin>
     </PersistQueryClientProvider>

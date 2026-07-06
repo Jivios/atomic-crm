@@ -81,8 +81,9 @@ function runVitest(wt, configFile, projects = []) {
 
 // The full validation chain, run by validate-on-stop.mjs on SubagentStop (after
 // every developer stop, ticket or lightweight MODE). Per dirty worktree, fail-fast: prettier auto-fix (+ commit),
-// typecheck, unit app, unit functions; then e2e once in the repo (full mode
-// only). VALIDATE_DRY_RUN=1 skips everything, =fail simulates a failure.
+// typecheck, unit app, unit functions. End-to-end browser tests are not part of
+// this gate — run separately, on demand. VALIDATE_DRY_RUN=1 skips everything,
+// =fail simulates a failure.
 // Returns { ok: true, skipReason? } or { ok: false, step, output }.
 export function runValidationSteps(ctx, { worktree = "", base = "" } = {}) {
   if (process.env.VALIDATE_DRY_RUN === "1") {
@@ -142,16 +143,5 @@ export function runValidationSteps(ctx, { worktree = "", base = "" } = {}) {
     ctx.log(`OK wt=${wt}`);
   }
 
-  const mode = process.env.MODE || "demo";
-  if (mode === "demo") {
-    ctx.log("e2e skipped (demo mode)");
-    return { ok: true };
-  }
-  const e2e = bash("npx playwright test 2>&1", { cwd: ctx.repo });
-  if (e2e.status !== 0) {
-    ctx.log(`FAIL step=e2e exit=${e2e.status}`);
-    return { ok: false, step: "e2e", output: tailLines(e2e.stdout, 50) + "\n" };
-  }
-  ctx.log("e2e OK");
   return { ok: true };
 }

@@ -302,11 +302,23 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/providers/commons/raSupabaseGreekMessages.ts",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/providers/commons/mergeContacts.ts",
           "type": "registry:component"
         },
         {
           "path": "src/components/atomic-crm/providers/commons/i18nProvider.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/providers/commons/greekMessages.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/providers/commons/greekCrmMessages.ts",
           "type": "registry:component"
         },
         {
@@ -335,6 +347,10 @@
         },
         {
           "path": "src/components/atomic-crm/providers/commons/activity.ts",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/properties/PropertiesPage.tsx",
           "type": "registry:component"
         },
         {
@@ -495,6 +511,10 @@
         },
         {
           "path": "src/components/atomic-crm/login/LoginSkeleton.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/login/LoginPage.tsx.bak-home-direct",
           "type": "registry:component"
         },
         {
@@ -795,6 +815,10 @@
         },
         {
           "path": "src/components/atomic-crm/companies/AutocompleteCompanyInput.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "src/components/atomic-crm/calendar/CalendarPage.tsx",
           "type": "registry:component"
         },
         {

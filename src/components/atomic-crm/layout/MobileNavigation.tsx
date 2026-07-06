@@ -6,7 +6,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { Home, ListTodo, Plus, Settings, Users } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  Home,
+  ListTodo,
+  Plus,
+  Settings,
+  Users,
+} from "lucide-react";
 import { useTranslate } from "ra-core";
 import { Link, matchPath, useLocation, useMatch } from "react-router";
 import { ContactCreateSheet } from "../contacts/ContactCreateSheet";
@@ -27,6 +35,10 @@ export const MobileNavigation = () => {
     currentPath = "/companies";
   } else if (matchPath("/tasks/*", location.pathname)) {
     currentPath = "/tasks";
+  } else if (matchPath("/properties/*", location.pathname)) {
+    currentPath = "/properties";
+  } else if (matchPath("/calendar/*", location.pathname)) {
+    currentPath = "/calendar";
   } else if (matchPath("/deals/*", location.pathname)) {
     currentPath = "/deals";
   } else {
@@ -69,6 +81,22 @@ export const MobileNavigation = () => {
             isActive={currentPath === "/contacts"}
           />
           <CreateButton />
+          <NavigationButton
+            href="/properties"
+            Icon={Building2}
+            label={translate("resources.properties.name", {
+              smart_count: 2,
+            })}
+            isActive={currentPath === "/properties"}
+          />
+          <NavigationButton
+            href="/calendar"
+            Icon={CalendarDays}
+            label={translate("resources.calendar.name", {
+              smart_count: 1,
+            })}
+            isActive={currentPath === "/calendar"}
+          />
           <NavigationButton
             href="/tasks"
             Icon={ListTodo}

@@ -59,21 +59,8 @@ const greekCatalog = mergeTranslations(
   greekCrmMessages,
 );
 
-export const getInitialLocale = (): "en" | "fr" | "el" => {
-  if (typeof navigator === "undefined") {
-    return "en";
-  }
-
-  const browserLocale = navigator.languages?.[0] ?? navigator.language;
-  const lowerBrowserLocale = browserLocale?.toLowerCase();
-  if (lowerBrowserLocale?.startsWith("fr")) {
-    return "fr";
-  }
-  if (lowerBrowserLocale?.startsWith("el")) {
-    return "el";
-  }
-
-  return "en";
+export const getInitialLocale = (): Locale => {
+  return "el";
 };
 
 export const i18nProvider = polyglotI18nProvider(
@@ -86,7 +73,7 @@ export const i18nProvider = polyglotI18nProvider(
     }
     return englishCatalog;
   },
-  getInitialLocale(),
+  "el",
   [
     { locale: "en", name: "English" },
     { locale: "fr", name: "Français" },

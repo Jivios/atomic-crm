@@ -2,6 +2,12 @@ import type { CrmMessages } from "./englishCrmMessages";
 
 export const greekCrmMessages = {
   resources: {
+    calendar: {
+      name: "Ημερολόγιο",
+    },
+    properties: {
+      name: "Ακίνητο |||| Ακίνητα",
+    },
     companies: {
       name: "Εταιρεία |||| Εταιρείες",
       forcedCaseName: "Εταιρεία",
