@@ -1,3 +1,5 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -11,6 +13,8 @@ type ServiceAccount = {
 };
 
 type CalendarEventPayload = {
+  action?: "create" | "delete" | "complete" | "reopen";
+  eventId?: string;
   summary?: string;
   description?: string;
   location?: string;
@@ -31,19 +35,12 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function preview(value: string) {
-  if (value.length <= 16) return value;
-  return `${value.slice(0, 6)}...${value.slice(-24)}`;
-}
-
 function base64UrlEncode(input: string | Uint8Array): string {
   const bytes =
     typeof input === "string" ? new TextEncoder().encode(input) : input;
 
   let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
+  for (const byte of bytes) binary += String.fromCharCode(byte);
 
   return btoa(binary)
     .replace(/\+/g, "-")
@@ -72,21 +69,23 @@ async function createSignedJwt(
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
 
-  const header = {
-    alg: "RS256",
-    typ: "JWT",
-  };
+  const encodedHeader = base64UrlEncode(
+    JSON.stringify({
+      alg: "RS256",
+      typ: "JWT",
+    }),
+  );
 
-  const payload = {
-    iss: serviceAccount.client_email,
-    scope: GOOGLE_CALENDAR_SCOPE,
-    aud: GOOGLE_TOKEN_URL,
-    exp: now + 3600,
-    iat: now,
-  };
+  const encodedPayload = base64UrlEncode(
+    JSON.stringify({
+      iss: serviceAccount.client_email,
+      scope: GOOGLE_CALENDAR_SCOPE,
+      aud: GOOGLE_TOKEN_URL,
+      exp: now + 3600,
+      iat: now,
+    }),
+  );
 
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const unsignedJwt = `${encodedHeader}.${encodedPayload}`;
 
   const privateKey = await crypto.subtle.importKey(
@@ -135,7 +134,38 @@ async function getGoogleAccessToken(
   return data.access_token;
 }
 
-function validatePayload(payload: CalendarEventPayload) {
+function getSupabaseClient(req: Request) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const authorization = req.headers.get("Authorization") ?? "";
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Missing Supabase Edge Function environment variables.");
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: authorization,
+      },
+    },
+  });
+}
+
+async function requireUser(supabaseClient: ReturnType<typeof createClient>) {
+  const {
+    data: { user },
+    error,
+  } = await supabaseClient.auth.getUser();
+
+  if (error || !user) {
+    throw new Error("Not authenticated.");
+  }
+
+  return user;
+}
+
+function validateCreatePayload(payload: CalendarEventPayload) {
   if (!payload.summary) throw new Error("Missing required field: summary");
   if (!payload.start) throw new Error("Missing required field: start");
   if (!payload.end) throw new Error("Missing required field: end");
@@ -147,83 +177,89 @@ function validatePayload(payload: CalendarEventPayload) {
   if (Number.isNaN(Date.parse(payload.end))) {
     throw new Error("Invalid end datetime");
   }
+
+  if (Date.parse(payload.end) <= Date.parse(payload.start)) {
+    throw new Error("Event end must be after event start.");
+  }
 }
 
-async function googleFetch(
-  url: string,
-  accessToken: string,
-  init: RequestInit = {},
-) {
-  const response = await fetch(url, {
-    ...init,
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+async function readGoogleResponse(response: Response) {
+  const text = await response.text();
+
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+async function ensureCalendarVisible(calendarId: string, accessToken: string) {
+  await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+    method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
-      ...(init.headers || {}),
     },
-  });
+    body: JSON.stringify({
+      id: calendarId,
+      selected: true,
+    }),
+  }).catch(() => null);
+}
 
-  let data: unknown = null;
+async function findCalendarEvent(
+  supabaseClient: ReturnType<typeof createClient>,
+  eventId: string,
+) {
+  if (isUuid(eventId)) {
+    const { data, error } = await supabaseClient
+      .from("calendar_events")
+      .select("*")
+      .eq("id", eventId)
+      .maybeSingle();
 
-  try {
-    data = await response.json();
-  } catch {
-    data = null;
+    if (error) throw error;
+    if (data) return data;
   }
 
-  return {
-    ok: response.ok,
-    status: response.status,
-    data,
-  };
+  const { data, error } = await supabaseClient
+    .from("calendar_events")
+    .select("*")
+    .eq("google_event_id", eventId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data;
 }
 
-async function addCalendarToServiceAccountList(
-  calendarId: string,
-  accessToken: string,
+async function insertActivity(
+  supabaseClient: ReturnType<typeof createClient>,
+  calendarEventId: string,
+  action: string,
+  message: string,
+  metadata: Record<string, unknown> = {},
 ) {
-  return googleFetch(
-    "https://www.googleapis.com/calendar/v3/users/me/calendarList",
-    accessToken,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        id: calendarId,
-        selected: true,
-      }),
-    },
-  );
-}
+  const { error } = await supabaseClient
+    .from("calendar_event_activity")
+    .insert({
+      calendar_event_id: calendarEventId,
+      action,
+      message,
+      metadata,
+    });
 
-async function createGoogleCalendarEvent(
-  calendarId: string,
-  accessToken: string,
-  payload: CalendarEventPayload,
-) {
-  const googleEvent = {
-    summary: payload.summary,
-    description: payload.description ?? "",
-    location: payload.location ?? "",
-    start: {
-      dateTime: payload.start,
-      timeZone: "Europe/Athens",
-    },
-    end: {
-      dateTime: payload.end,
-      timeZone: "Europe/Athens",
-    },
-  };
-
-  return googleFetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-      calendarId,
-    )}/events`,
-    accessToken,
-    {
-      method: "POST",
-      body: JSON.stringify(googleEvent),
-    },
-  );
+  if (error) {
+    console.error("Failed to insert calendar activity:", error);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -250,62 +286,227 @@ Deno.serve(async (req) => {
     const calendarId = rawCalendarId.trim();
     const serviceAccount = JSON.parse(serviceAccountJson) as ServiceAccount;
     const payload = (await req.json()) as CalendarEventPayload;
+    const action = payload.action ?? "create";
 
-    validatePayload(payload);
+    const supabaseClient = getSupabaseClient(req);
+    await requireUser(supabaseClient);
 
     const accessToken = await getGoogleAccessToken(serviceAccount);
+    await ensureCalendarVisible(calendarId, accessToken);
 
-    const calendarGetBefore = await googleFetch(
+    if (action === "complete" || action === "reopen") {
+      if (!payload.eventId) throw new Error("Missing required field: eventId");
+
+      const crmEvent = await findCalendarEvent(supabaseClient, payload.eventId);
+
+      if (!crmEvent) {
+        throw new Error("Calendar event not found.");
+      }
+
+      const nextStatus = action === "complete" ? "completed" : "active";
+
+      const { error } = await supabaseClient
+        .from("calendar_events")
+        .update({
+          status: nextStatus,
+          deleted_at: null,
+          deleted_source: null,
+        })
+        .eq("id", crmEvent.id);
+
+      if (error) throw error;
+
+      await insertActivity(
+        supabaseClient,
+        crmEvent.id,
+        action === "complete" ? "completed" : "reopened",
+        action === "complete"
+          ? "Event marked as completed."
+          : "Event reopened.",
+      );
+
+      return jsonResponse({
+        ok: true,
+        eventId: crmEvent.id,
+        status: nextStatus,
+      });
+    }
+
+    if (action === "delete") {
+      if (!payload.eventId) throw new Error("Missing required field: eventId");
+
+      const crmEvent = await findCalendarEvent(supabaseClient, payload.eventId);
+      const googleEventId = crmEvent?.google_event_id ?? payload.eventId;
+
+      const deleteResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+          calendarId,
+        )}/events/${encodeURIComponent(googleEventId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      const deleteDetails = await readGoogleResponse(deleteResponse);
+      const googleDeleteOk =
+        deleteResponse.ok ||
+        deleteResponse.status === 404 ||
+        deleteResponse.status === 410;
+
+      if (!googleDeleteOk) {
+        console.error("Google Calendar delete event error:", deleteDetails);
+
+        return jsonResponse(
+          {
+            error: "Failed to delete Google Calendar event",
+            details: deleteDetails,
+          },
+          deleteResponse.status,
+        );
+      }
+
+      if (crmEvent) {
+        const { error } = await supabaseClient
+          .from("calendar_events")
+          .update({
+            status: "deleted",
+            deleted_at: new Date().toISOString(),
+            deleted_source: "crm",
+            sync_status: "synced",
+          })
+          .eq("id", crmEvent.id);
+
+        if (error) throw error;
+
+        await insertActivity(
+          supabaseClient,
+          crmEvent.id,
+          "deleted",
+          "Event deleted from CRM and Google Calendar.",
+          {
+            googleEventId,
+          },
+        );
+      }
+
+      return jsonResponse({
+        ok: true,
+        deleted: true,
+        eventId: payload.eventId,
+      });
+    }
+
+    validateCreatePayload(payload);
+
+    const { data: crmEvent, error: insertError } = await supabaseClient
+      .from("calendar_events")
+      .insert({
+        title: payload.summary!.trim(),
+        start_at: payload.start,
+        end_at: payload.end,
+        location: payload.location?.trim() || null,
+        description: payload.description?.trim() || null,
+        status: "active",
+        sync_status: "pending",
+      })
+      .select()
+      .single();
+
+    if (insertError) throw insertError;
+
+    await insertActivity(
+      supabaseClient,
+      crmEvent.id,
+      "created",
+      "Event created in Home Direct CRM.",
+    );
+
+    const googleEvent = {
+      summary: payload.summary,
+      description: payload.description ?? "",
+      location: payload.location ?? "",
+      start: {
+        dateTime: payload.start,
+        timeZone: "Europe/Athens",
+      },
+      end: {
+        dateTime: payload.end,
+        timeZone: "Europe/Athens",
+      },
+    };
+
+    const createEventResponse = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
         calendarId,
-      )}`,
-      accessToken,
-      { method: "GET" },
+      )}/events`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(googleEvent),
+      },
     );
 
-    const calendarListInsert = await addCalendarToServiceAccountList(
-      calendarId,
-      accessToken,
-    );
+    const createdEvent = await createEventResponse.json();
 
-    const createEvent = await createGoogleCalendarEvent(
-      calendarId,
-      accessToken,
-      payload,
-    );
+    if (!createEventResponse.ok) {
+      await supabaseClient
+        .from("calendar_events")
+        .update({
+          sync_status: "error",
+        })
+        .eq("id", crmEvent.id);
 
-    if (!createEvent.ok) {
-      console.error("Google Calendar create event error:", createEvent.data);
+      await insertActivity(
+        supabaseClient,
+        crmEvent.id,
+        "google_sync_error",
+        "Google Calendar sync failed.",
+        {
+          details: createdEvent,
+        },
+      );
+
+      console.error("Google Calendar create event error:", createdEvent);
 
       return jsonResponse(
         {
           error: "Failed to create Google Calendar event",
-          diagnostics: {
-            serviceAccountEmail: serviceAccount.client_email,
-            calendarIdPreview: preview(calendarId),
-            calendarIdLength: calendarId.length,
-            calendarGetBeforeStatus: calendarGetBefore.status,
-            calendarListInsertStatus: calendarListInsert.status,
-            createEventStatus: createEvent.status,
-          },
-          details: createEvent.data,
-          calendarGetBeforeDetails: calendarGetBefore.data,
-          calendarListInsertDetails: calendarListInsert.data,
+          details: createdEvent,
         },
-        createEvent.status,
+        createEventResponse.status,
       );
     }
 
-    const createdEvent = createEvent.data as {
-      id?: string;
-      htmlLink?: string;
-      summary?: string;
-      start?: unknown;
-      end?: unknown;
-    };
+    const { error: updateError } = await supabaseClient
+      .from("calendar_events")
+      .update({
+        google_event_id: createdEvent.id,
+        google_html_link: createdEvent.htmlLink,
+        sync_status: "synced",
+      })
+      .eq("id", crmEvent.id);
+
+    if (updateError) throw updateError;
+
+    await insertActivity(
+      supabaseClient,
+      crmEvent.id,
+      "google_synced",
+      "Event synced to Google Calendar.",
+      {
+        googleEventId: createdEvent.id,
+      },
+    );
 
     return jsonResponse({
       ok: true,
+      crmEventId: crmEvent.id,
       eventId: createdEvent.id,
       htmlLink: createdEvent.htmlLink,
       summary: createdEvent.summary,
@@ -319,7 +520,9 @@ Deno.serve(async (req) => {
       {
         error: error instanceof Error ? error.message : "Unknown error",
       },
-      500,
+      error instanceof Error && error.message === "Not authenticated."
+        ? 401
+        : 500,
     );
   }
 });
