@@ -12,6 +12,8 @@ type ServiceAccount = {
   private_key: string;
 };
 
+type SyncTarget = "crm_only" | "crm_google";
+
 type CalendarEventPayload = {
   action?: "create" | "delete" | "complete" | "reopen" | "restore";
   eventId?: string;
@@ -20,10 +22,13 @@ type CalendarEventPayload = {
   location?: string;
   start?: string;
   end?: string;
+  syncTarget?: SyncTarget;
+  reminderMinutes?: number | null;
 };
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
+const ALLOWED_REMINDER_MINUTES = new Set([0, 15, 30, 60, 1440]);
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -33,6 +38,37 @@ function jsonResponse(body: unknown, status = 200) {
       "Content-Type": "application/json",
     },
   });
+}
+
+function normalizeSyncTarget(value: unknown): SyncTarget {
+  return value === "crm_only" ? "crm_only" : "crm_google";
+}
+
+function normalizeReminderMinutes(value: unknown) {
+  if (value === null || value === undefined || value === "") return 30;
+
+  const parsed = Number(value);
+
+  return ALLOWED_REMINDER_MINUTES.has(parsed) ? parsed : 30;
+}
+
+function _buildGoogleReminders(reminderMinutes: number) {
+  if (reminderMinutes <= 0) {
+    return {
+      useDefault: false,
+      overrides: [],
+    };
+  }
+
+  return {
+    useDefault: false,
+    overrides: [
+      {
+        method: "popup",
+        minutes: reminderMinutes,
+      },
+    ],
+  };
 }
 
 function base64UrlEncode(input: string | Uint8Array): string {
@@ -184,7 +220,7 @@ function validateCreatePayload(payload: CalendarEventPayload) {
 }
 
 function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(
     value,
   );
 }
@@ -260,6 +296,80 @@ async function insertActivity(
   if (error) {
     console.error("Failed to insert calendar activity:", error);
   }
+}
+
+async function createGoogleCalendarEvent({
+  calendarId,
+  accessToken,
+  summary,
+  description,
+  location,
+  start,
+  end,
+  reminderMinutes: _reminderMinutes,
+}: {
+  calendarId: string;
+  accessToken: string;
+  summary: string;
+  description?: string;
+  location?: string;
+  start: string;
+  end: string;
+  reminderMinutes: number;
+}) {
+  const googleEvent = {
+    summary,
+    description: description ?? "",
+    location: location ?? "",
+    start: {
+      dateTime: start,
+      timeZone: "Europe/Athens",
+    },
+    end: {
+      dateTime: end,
+      timeZone: "Europe/Athens",
+    },
+    reminders: {
+      useDefault: false,
+      overrides: [{ method: "popup", minutes: 30 }],
+    },
+  };
+
+  const response = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+      calendarId,
+    )}/events`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(addGoogleReminder30(googleEvent)),
+    },
+  );
+
+  const data = await response.json();
+
+  return {
+    response,
+    data,
+  };
+}
+
+function addGoogleReminder30(event: Record<string, unknown>) {
+  return {
+    ...event,
+    reminders: {
+      useDefault: false,
+      overrides: [
+        {
+          method: "popup",
+          minutes: 30,
+        },
+      ],
+    },
+  };
 }
 
 Deno.serve(async (req) => {
@@ -341,37 +451,53 @@ Deno.serve(async (req) => {
         throw new Error("Calendar event not found.");
       }
 
-      const googleEvent = {
-        summary: crmEvent.title,
-        description: crmEvent.description ?? "",
-        location: crmEvent.location ?? "",
-        start: {
-          dateTime: crmEvent.start_at,
-          timeZone: "Europe/Athens",
-        },
-        end: {
-          dateTime: crmEvent.end_at,
-          timeZone: "Europe/Athens",
-        },
-      };
-
-      const restoreResponse = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-          calendarId,
-        )}/events`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(googleEvent),
-        },
+      const syncTarget = normalizeSyncTarget(crmEvent.sync_target);
+      const reminderMinutes = normalizeReminderMinutes(
+        crmEvent.reminder_minutes,
       );
 
-      const restoredGoogleEvent = await restoreResponse.json();
+      if (syncTarget === "crm_only") {
+        const { error } = await supabaseClient
+          .from("calendar_events")
+          .update({
+            status: "active",
+            deleted_at: null,
+            deleted_source: null,
+            sync_status: "local_only",
+          })
+          .eq("id", crmEvent.id);
 
-      if (!restoreResponse.ok) {
+        if (error) throw error;
+
+        await insertActivity(
+          supabaseClient,
+          crmEvent.id,
+          "restored",
+          "CRM-only event restored from CRM history.",
+        );
+
+        return jsonResponse({
+          ok: true,
+          restored: true,
+          crmEventId: crmEvent.id,
+          eventId: crmEvent.id,
+          syncTarget,
+        });
+      }
+
+      const { response, data: restoredGoogleEvent } =
+        await createGoogleCalendarEvent({
+          calendarId,
+          accessToken,
+          summary: crmEvent.title,
+          description: crmEvent.description ?? "",
+          location: crmEvent.location ?? "",
+          start: crmEvent.start_at,
+          end: crmEvent.end_at,
+          reminderMinutes,
+        });
+
+      if (!response.ok) {
         await supabaseClient
           .from("calendar_events")
           .update({
@@ -394,7 +520,7 @@ Deno.serve(async (req) => {
             error: "Failed to restore Google Calendar event",
             details: restoredGoogleEvent,
           },
-          restoreResponse.status,
+          response.status,
         );
       }
 
@@ -407,6 +533,8 @@ Deno.serve(async (req) => {
           google_event_id: restoredGoogleEvent.id,
           google_html_link: restoredGoogleEvent.htmlLink,
           sync_status: "synced",
+          sync_target: syncTarget,
+          reminder_minutes: reminderMinutes,
         })
         .eq("id", crmEvent.id);
 
@@ -419,6 +547,7 @@ Deno.serve(async (req) => {
         "Deleted event restored from CRM history.",
         {
           googleEventId: restoredGoogleEvent.id,
+          reminderMinutes,
         },
       );
 
@@ -428,6 +557,8 @@ Deno.serve(async (req) => {
         crmEventId: crmEvent.id,
         eventId: restoredGoogleEvent.id,
         htmlLink: restoredGoogleEvent.htmlLink,
+        syncTarget,
+        reminderMinutes,
       });
     }
 
@@ -435,36 +566,37 @@ Deno.serve(async (req) => {
       if (!payload.eventId) throw new Error("Missing required field: eventId");
 
       const crmEvent = await findCalendarEvent(supabaseClient, payload.eventId);
-      const googleEventId = crmEvent?.google_event_id ?? payload.eventId;
 
-      const deleteResponse = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-          calendarId,
-        )}/events/${encodeURIComponent(googleEventId)}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
-
-      const deleteDetails = await readGoogleResponse(deleteResponse);
-      const googleDeleteOk =
-        deleteResponse.ok ||
-        deleteResponse.status === 404 ||
-        deleteResponse.status === 410;
-
-      if (!googleDeleteOk) {
-        console.error("Google Calendar delete event error:", deleteDetails);
-
-        return jsonResponse(
+      if (crmEvent?.google_event_id) {
+        const deleteResponse = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+            calendarId,
+          )}/events/${encodeURIComponent(crmEvent.google_event_id)}`,
           {
-            error: "Failed to delete Google Calendar event",
-            details: deleteDetails,
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
           },
-          deleteResponse.status,
         );
+
+        const deleteDetails = await readGoogleResponse(deleteResponse);
+        const googleDeleteOk =
+          deleteResponse.ok ||
+          deleteResponse.status === 404 ||
+          deleteResponse.status === 410;
+
+        if (!googleDeleteOk) {
+          console.error("Google Calendar delete event error:", deleteDetails);
+
+          return jsonResponse(
+            {
+              error: "Failed to delete Google Calendar event",
+              details: deleteDetails,
+            },
+            deleteResponse.status,
+          );
+        }
       }
 
       if (crmEvent) {
@@ -474,7 +606,8 @@ Deno.serve(async (req) => {
             status: "deleted",
             deleted_at: new Date().toISOString(),
             deleted_source: "crm",
-            sync_status: "synced",
+            sync_status:
+              crmEvent.sync_target === "crm_only" ? "local_only" : "synced",
           })
           .eq("id", crmEvent.id);
 
@@ -484,9 +617,11 @@ Deno.serve(async (req) => {
           supabaseClient,
           crmEvent.id,
           "deleted",
-          "Event deleted from CRM and Google Calendar.",
+          crmEvent.google_event_id
+            ? "Event deleted from CRM and Google Calendar."
+            : "CRM-only event deleted from CRM.",
           {
-            googleEventId,
+            googleEventId: crmEvent.google_event_id,
           },
         );
       }
@@ -500,6 +635,9 @@ Deno.serve(async (req) => {
 
     validateCreatePayload(payload);
 
+    const syncTarget = normalizeSyncTarget(payload.syncTarget);
+    const reminderMinutes = normalizeReminderMinutes(payload.reminderMinutes);
+
     const { data: crmEvent, error: insertError } = await supabaseClient
       .from("calendar_events")
       .insert({
@@ -509,7 +647,9 @@ Deno.serve(async (req) => {
         location: payload.location?.trim() || null,
         description: payload.description?.trim() || null,
         status: "active",
-        sync_status: "pending",
+        sync_status: syncTarget === "crm_only" ? "local_only" : "pending",
+        sync_target: syncTarget,
+        reminder_minutes: reminderMinutes,
       })
       .select()
       .single();
@@ -520,38 +660,36 @@ Deno.serve(async (req) => {
       supabaseClient,
       crmEvent.id,
       "created",
-      "Event created in Home Direct CRM.",
-    );
-
-    const googleEvent = {
-      summary: payload.summary,
-      description: payload.description ?? "",
-      location: payload.location ?? "",
-      start: {
-        dateTime: payload.start,
-        timeZone: "Europe/Athens",
-      },
-      end: {
-        dateTime: payload.end,
-        timeZone: "Europe/Athens",
-      },
-    };
-
-    const createEventResponse = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-        calendarId,
-      )}/events`,
+      syncTarget === "crm_only"
+        ? "CRM-only event created in Home Direct CRM."
+        : "Event created in Home Direct CRM.",
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(googleEvent),
+        syncTarget,
+        reminderMinutes,
       },
     );
 
-    const createdEvent = await createEventResponse.json();
+    if (syncTarget === "crm_only") {
+      return jsonResponse({
+        ok: true,
+        crmEventId: crmEvent.id,
+        eventId: crmEvent.id,
+        syncTarget,
+        reminderMinutes,
+      });
+    }
+
+    const { response: createEventResponse, data: createdEvent } =
+      await createGoogleCalendarEvent({
+        calendarId,
+        accessToken,
+        summary: payload.summary!.trim(),
+        description: payload.description?.trim() ?? "",
+        location: payload.location?.trim() ?? "",
+        start: payload.start!,
+        end: payload.end!,
+        reminderMinutes,
+      });
 
     if (!createEventResponse.ok) {
       await supabaseClient
@@ -568,6 +706,7 @@ Deno.serve(async (req) => {
         "Google Calendar sync failed.",
         {
           details: createdEvent,
+          reminderMinutes,
         },
       );
 
@@ -600,6 +739,7 @@ Deno.serve(async (req) => {
       "Event synced to Google Calendar.",
       {
         googleEventId: createdEvent.id,
+        reminderMinutes,
       },
     );
 
@@ -611,6 +751,8 @@ Deno.serve(async (req) => {
       summary: createdEvent.summary,
       start: createdEvent.start,
       end: createdEvent.end,
+      syncTarget,
+      reminderMinutes,
     });
   } catch (error) {
     console.error(error);
