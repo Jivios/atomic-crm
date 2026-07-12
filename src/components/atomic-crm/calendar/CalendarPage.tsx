@@ -876,119 +876,127 @@ export const CalendarPage = () => {
         )}
 
         {isFormOpen && (
-          <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-            <div className="mb-5">
-              <h2 className="text-xl font-semibold text-slate-950">
-                Νέα ενέργεια
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Συμπλήρωσε τα στοιχεία και δημιούργησε πραγματικό event στο
-                Google Calendar.
-              </p>
-            </div>
-
-            <form onSubmit={handleCreateAppointment} className="grid gap-4">
-              <div className="grid gap-4 lg:grid-cols-2">
-                <label className="grid gap-2 text-sm font-medium text-slate-700">
-                  Τίτλος
-                  <input
-                    value={appointmentForm.summary}
-                    onChange={(event) =>
-                      updateAppointmentForm("summary", event.target.value)
-                    }
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
-                    placeholder="π.χ. Προβολή ακινήτου - Γλυφάδα"
-                  />
-                </label>
-
-                <label className="grid gap-2 text-sm font-medium text-slate-700">
-                  Τοποθεσία / διεύθυνση
-                  <input
-                    value={appointmentForm.location}
-                    onChange={(event) =>
-                      updateAppointmentForm("location", event.target.value)
-                    }
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
-                    placeholder="π.χ. Βουλιαγμένης 120, Γλυφάδα"
-                  />
-                </label>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <label className="grid gap-2 text-sm font-medium text-slate-700">
-                  Ημερομηνία
-                  <input
-                    type="date"
-                    value={appointmentForm.date}
-                    onChange={(event) =>
-                      updateAppointmentForm("date", event.target.value)
-                    }
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
-                  />
-                </label>
-
-                <label className="grid gap-2 text-sm font-medium text-slate-700">
-                  Ώρα έναρξης
-                  <input
-                    type="time"
-                    value={appointmentForm.startTime}
-                    onChange={(event) =>
-                      updateAppointmentForm("startTime", event.target.value)
-                    }
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
-                  />
-                </label>
-
-                <label className="grid gap-2 text-sm font-medium text-slate-700">
-                  Ώρα λήξης
-                  <input
-                    type="time"
-                    value={appointmentForm.endTime}
-                    onChange={(event) =>
-                      updateAppointmentForm("endTime", event.target.value)
-                    }
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
-                  />
-                </label>
-              </div>
-
-              <label className="grid gap-2 text-sm font-medium text-slate-700">
-                Σημειώσεις
-                <textarea
-                  value={appointmentForm.description}
-                  onChange={(event) =>
-                    updateAppointmentForm("description", event.target.value)
-                  }
-                  rows={3}
-                  className="resize-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
-                  placeholder="π.χ. Πελάτης ενδιαφέρεται για 3 υπνοδωμάτια, πάρκινγκ και θέα."
-                />
-              </label>
-
-              <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-slate-500">
-                  Προεπισκόπηση:{" "}
-                  <span className="font-semibold text-slate-800">
-                    {appointmentForm.summary || "Νέα ενέργεια"} —{" "}
-                    {appointmentPreview}
-                  </span>
+          <div
+            className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+            onClick={() => setIsFormOpen(false)}
+          >
+            <section
+              onClick={(e) => e.stopPropagation()}
+              className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-200"
+            >
+              <div className="mb-5">
+                <h2 className="text-xl font-semibold text-slate-950">
+                  Νέα ενέργεια
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Συμπλήρωσε τα στοιχεία και δημιούργησε πραγματικό event στο
+                  Google Calendar.
                 </p>
-
-                <button
-                  type="submit"
-                  disabled={createEventState.status === "loading"}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#032360] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {createEventState.status === "loading" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="h-4 w-4" />
-                  )}
-                  Δημιουργία Ενέργειας
-                </button>
               </div>
-            </form>
-          </section>
+
+              <form onSubmit={handleCreateAppointment} className="grid gap-4">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <label className="grid gap-2 text-sm font-medium text-slate-700">
+                    Τίτλος
+                    <input
+                      value={appointmentForm.summary}
+                      onChange={(event) =>
+                        updateAppointmentForm("summary", event.target.value)
+                      }
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
+                      placeholder="π.χ. Προβολή ακινήτου - Γλυφάδα"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm font-medium text-slate-700">
+                    Τοποθεσία / διεύθυνση
+                    <input
+                      value={appointmentForm.location}
+                      onChange={(event) =>
+                        updateAppointmentForm("location", event.target.value)
+                      }
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
+                      placeholder="π.χ. Βουλιαγμένης 120, Γλυφάδα"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <label className="grid gap-2 text-sm font-medium text-slate-700">
+                    Ημερομηνία
+                    <input
+                      type="date"
+                      value={appointmentForm.date}
+                      onChange={(event) =>
+                        updateAppointmentForm("date", event.target.value)
+                      }
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm font-medium text-slate-700">
+                    Ώρα έναρξης
+                    <input
+                      type="time"
+                      value={appointmentForm.startTime}
+                      onChange={(event) =>
+                        updateAppointmentForm("startTime", event.target.value)
+                      }
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm font-medium text-slate-700">
+                    Ώρα λήξης
+                    <input
+                      type="time"
+                      value={appointmentForm.endTime}
+                      onChange={(event) =>
+                        updateAppointmentForm("endTime", event.target.value)
+                      }
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
+                    />
+                  </label>
+                </div>
+
+                <label className="grid gap-2 text-sm font-medium text-slate-700">
+                  Σημειώσεις
+                  <textarea
+                    value={appointmentForm.description}
+                    onChange={(event) =>
+                      updateAppointmentForm("description", event.target.value)
+                    }
+                    rows={3}
+                    className="resize-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-950 outline-none transition focus:border-[#032360] focus:ring-2 focus:ring-[#032360]/10"
+                    placeholder="π.χ. Πελάτης ενδιαφέρεται για 3 υπνοδωμάτια, πάρκινγκ και θέα."
+                  />
+                </label>
+
+                <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-slate-500">
+                    Προεπισκόπηση:{" "}
+                    <span className="font-semibold text-slate-800">
+                      {appointmentForm.summary || "Νέα ενέργεια"} —{" "}
+                      {appointmentPreview}
+                    </span>
+                  </p>
+
+                  <button
+                    type="submit"
+                    disabled={createEventState.status === "loading"}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#032360] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {createEventState.status === "loading" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
+                    Δημιουργία Ενέργειας
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
         )}
 
         <section className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-200">
