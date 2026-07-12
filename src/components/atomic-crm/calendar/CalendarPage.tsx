@@ -273,12 +273,12 @@ function getEventDetailsFromInput(event: EventInput): EventDetails {
 }
 
 const initialAppointmentForm: AppointmentFormState = {
-  summary: "Ραντεβού ανάθεσης",
+  summary: "Ενέργεια ανάθεσης",
   date: getTomorrowDate(),
   startTime: "10:00",
   endTime: "11:00",
   location: "Αθήνα, Ελλάδα",
-  description: "Ραντεβού από το Home Direct CRM.",
+  description: "Ενέργεια από το Home Direct CRM.",
 };
 
 export const CalendarPage = () => {
@@ -514,7 +514,7 @@ export const CalendarPage = () => {
 
     try {
       if (!appointmentForm.summary.trim()) {
-        throw new Error("Συμπλήρωσε τίτλο ραντεβού.");
+        throw new Error("Συμπλήρωσε τίτλο ενέργεια.");
       }
 
       if (!appointmentForm.date) {
@@ -583,7 +583,7 @@ export const CalendarPage = () => {
 
       setCreateEventState({
         status: "success",
-        message: `Το ραντεβού δημιουργήθηκε για ${appointmentPreview}.`,
+        message: `Το ενέργεια δημιουργήθηκε για ${appointmentPreview}.`,
         htmlLink: data.htmlLink,
       });
 
@@ -595,7 +595,7 @@ export const CalendarPage = () => {
         message:
           error instanceof Error
             ? error.message
-            : "Δεν ήταν δυνατή η δημιουργία ραντεβού.",
+            : "Δεν ήταν δυνατή η δημιουργία ενέργεια.",
       });
     }
   };
@@ -830,7 +830,7 @@ export const CalendarPage = () => {
               ) : (
                 <Plus className="h-4 w-4" />
               )}
-              Νέο Ραντεβού
+              Νέα Ενέργεια
             </button>
 
             <a
@@ -869,7 +869,7 @@ export const CalendarPage = () => {
           <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
             <div>
-              <p className="font-semibold">Δεν δημιουργήθηκε το ραντεβού.</p>
+              <p className="font-semibold">Δεν δημιουργήθηκε το ενέργεια.</p>
               <p className="mt-1">{createEventState.message}</p>
             </div>
           </div>
@@ -879,7 +879,7 @@ export const CalendarPage = () => {
           <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
             <div className="mb-5">
               <h2 className="text-xl font-semibold text-slate-950">
-                Νέο ραντεβού
+                Νέα ενέργεια
               </h2>
               <p className="mt-1 text-sm text-slate-500">
                 Συμπλήρωσε τα στοιχεία και δημιούργησε πραγματικό event στο
@@ -969,7 +969,7 @@ export const CalendarPage = () => {
                 <p className="text-sm text-slate-500">
                   Προεπισκόπηση:{" "}
                   <span className="font-semibold text-slate-800">
-                    {appointmentForm.summary || "Νέο ραντεβού"} —{" "}
+                    {appointmentForm.summary || "Νέα ενέργεια"} —{" "}
                     {appointmentPreview}
                   </span>
                 </p>
@@ -984,7 +984,7 @@ export const CalendarPage = () => {
                   ) : (
                     <Plus className="h-4 w-4" />
                   )}
-                  Δημιουργία ραντεβού
+                  Δημιουργία Ενέργειας
                 </button>
               </div>
             </form>
@@ -1234,7 +1234,7 @@ export const CalendarPage = () => {
                 ) : (
                   <div className="px-4 py-6 text-sm text-slate-500">
                     Δεν υπάρχουν events για αυτή την ημέρα. Κάνε click στο
-                    calendar για να δημιουργήσεις νέο ραντεβού.
+                    calendar για να δημιουργήσεις νέο ενέργεια.
                   </div>
                 )}
               </div>
@@ -1329,10 +1329,10 @@ export const CalendarPage = () => {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-[#032360]">
-                  Υπάρχει ήδη ραντεβού σε αυτή την ώρα
+                  Υπάρχει ήδη ενέργεια σε αυτή την ώρα
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  Το νέο ραντεβού που πας να δημιουργήσεις επικαλύπτεται με άλλο
+                  Το νέο ενέργεια που πας να δημιουργήσεις επικαλύπτεται με άλλο
                   event. Μπορείς να προχωρήσεις παρόλα αυτά ή να γυρίσεις πίσω
                   και να αλλάξεις ώρα.
                 </p>
@@ -1349,7 +1349,7 @@ export const CalendarPage = () => {
 
             <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm font-semibold text-amber-950">
-                Νέο ραντεβού: {overlapWarning.requestedTime}
+                Νέα ενέργεια: {overlapWarning.requestedTime}
               </p>
 
               <div className="mt-3 space-y-2">
