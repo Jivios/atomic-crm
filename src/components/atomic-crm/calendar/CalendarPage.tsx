@@ -1500,10 +1500,7 @@ export const CalendarPage = () => {
                 <h2 className="text-xl font-semibold text-red-700">
                   Διαγραφή event;
                 </h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  Πρόκειται να διαγράψεις αυτό το event από το Google Calendar.
-                  Αυτή η ενέργεια δεν αναιρείται εύκολα.
-                </p>
+                <p className="mt-2 text-sm text-slate-600"></p>
               </div>
 
               <button
