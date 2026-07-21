@@ -1,1 +1,1 @@
-export { PropertiesPage } from "./PropertiesPageV2";
+export { PropertiesPage } from "./PropertiesPageV3";
