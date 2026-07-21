@@ -350,6 +350,10 @@
           "type": "registry:component"
         },
         {
+          "path": "src/components/atomic-crm/properties/PropertiesPageV3.tsx",
+          "type": "registry:component"
+        },
+        {
           "path": "src/components/atomic-crm/properties/PropertiesPageV2.tsx",
           "type": "registry:component"
         },
