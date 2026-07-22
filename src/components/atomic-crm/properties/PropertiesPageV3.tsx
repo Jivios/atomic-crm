@@ -680,27 +680,45 @@ function getSubtypeLabel(
   );
 }
 
+function formatTitlePrice(value: string) {
+  const cleaned = value.replace(/[^0-9]/g, "");
+
+  if (!cleaned) return "";
+
+  return `€${Number(cleaned).toLocaleString("el-GR")}`;
+}
+
 function buildAutoTitle(
   form: Pick<
     FormState,
-    "category" | "subtype" | "builtSqm" | "plotSqm" | "area" | "neighborhood"
+    | "category"
+    | "subtype"
+    | "builtSqm"
+    | "plotSqm"
+    | "price"
+    | "area"
+    | "neighborhood"
   >,
 ) {
   const subtypeLabel = getSubtypeLabel(form.category, form.subtype);
   const sqm =
     form.builtSqm.trim() ||
     (form.category === "land" ? form.plotSqm.trim() : "");
-  const location = [form.area.trim(), form.neighborhood.trim()]
+  const price = formatTitlePrice(form.price);
+  const location = [form.neighborhood.trim(), form.area.trim()]
     .filter(Boolean)
     .join(", ");
 
-  return [
+  const main = [
     subtypeLabel,
     sqm ? `${sqm} τ.μ.` : "",
-    location ? `— ${location}` : "",
+    price ? `, ${price}` : "",
   ]
     .filter(Boolean)
-    .join(" ");
+    .join(" ")
+    .replace(" ,", ",");
+
+  return [main, location ? `| ${location}` : ""].filter(Boolean).join(" ");
 }
 
 function isMaisonetteLike(subtype: string) {
@@ -1020,6 +1038,7 @@ export const PropertiesPage = () => {
       form.category,
       form.neighborhood,
       form.plotSqm,
+      form.price,
       form.subtype,
     ],
   );
